@@ -127,6 +127,53 @@ class GetFileContentsToolHandler(ToolHandler):
             )
         ]
     
+class OmnisearchToolHandler(ToolHandler):
+    def __init__(self):
+        super().__init__("obsidian_omnisearch")
+
+    def get_tool_description(self):
+        return Tool(
+            name=self.name,
+            description="""Fuzzy full-text search across all files in the vault using Omnisearch.
+            Provides ranked results with relevance scores, excerpts, and matched words.
+            Can search across markdown, PDFs, images (with OCR), and Office documents.
+            Use this tool as the primary search — it is smarter and faster than simple search.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Search query (supports fuzzy matching)"
+                    }
+                },
+                "required": ["query"]
+            }
+        )
+
+    def run_tool(self, args: dict) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
+        if "query" not in args:
+            raise RuntimeError("query argument missing in arguments")
+
+        api = obsidian.Obsidian(api_key=api_key, host=obsidian_host)
+        results = api.omnisearch(args["query"])
+
+        formatted_results = []
+        for result in results:
+            formatted_results.append({
+                'path': result.get('path', ''),
+                'basename': result.get('basename', ''),
+                'score': result.get('score', 0),
+                'foundWords': result.get('foundWords', []),
+                'excerpt': result.get('excerpt', ''),
+            })
+
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(formatted_results, indent=2)
+            )
+        ]
+
 class SearchToolHandler(ToolHandler):
     def __init__(self):
         super().__init__("obsidian_simple_search")
@@ -134,7 +181,7 @@ class SearchToolHandler(ToolHandler):
     def get_tool_description(self):
         return Tool(
             name=self.name,
-            description="""Simple search for documents matching a specified text query across all files in the vault. 
+            description="""Simple search for documents matching a specified text query across all files in the vault.
             Use this tool when you want to do a simple text search""",
             inputSchema={
                 "type": "object",

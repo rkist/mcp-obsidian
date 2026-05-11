@@ -99,6 +99,29 @@ class Obsidian():
                 
         return "".join(result)
 
+    def omnisearch(self, query: str) -> Any:
+        """Search the vault using Omnisearch's HTTP API.
+
+        Omnisearch provides fuzzy full-text search with scoring,
+        and can index PDFs, images, and Office documents.
+
+        Args:
+            query: Search query string
+
+        Returns:
+            List of search results with scores, paths, and excerpts
+        """
+        omnisearch_port = int(os.getenv('OMNISEARCH_PORT', '51361'))
+        url = f"http://localhost:{omnisearch_port}/search"
+        params = {'q': query}
+
+        def call_fn():
+            response = requests.get(url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            return response.json()
+
+        return self._safe_call(call_fn)
+
     def search(self, query: str, context_length: int = 100) -> Any:
         url = f"{self.get_base_url()}/search/simple/"
         params = {
