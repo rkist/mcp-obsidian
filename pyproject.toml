@@ -1,6 +1,6 @@
 [project]
 name = "mcp-obsidian"
-version = "0.2.1"
+version = "0.2.2"
 description = "MCP server to work with Obsidian via the remote REST plugin"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,7 +20,13 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pyright>=1.1.389",
+    "pytest>=8.0",
+    "pytest-cov>=7.1.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [project.scripts]
 mcp-obsidian = "mcp_obsidian:main"
