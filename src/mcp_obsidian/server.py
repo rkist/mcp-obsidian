@@ -5,12 +5,16 @@ from functools import lru_cache
 from typing import Any
 import os
 from dotenv import load_dotenv
-from mcp.server import Server
+from mcp.server import Server, ServerRequestContext
 from mcp.types import (
     Tool,
     TextContent,
     ImageContent,
     EmbeddedResource,
+    ListToolsResult,
+    CallToolResult,
+    CallToolRequestParams,
+    PaginatedRequestParams,
 )
 
 load_dotenv()
@@ -26,8 +30,6 @@ logger = logging.getLogger("mcp-obsidian")
 api_key = os.getenv("OBSIDIAN_API_KEY")
 if not api_key:
     raise ValueError(f"OBSIDIAN_API_KEY environment variable required. Working directory: {os.getcwd()}")
-
-app = Server("mcp-obsidian")
 
 tool_handlers = {}
 def add_tool_handler(tool_class: tools.ToolHandler):
@@ -58,29 +60,42 @@ add_tool_handler(tools.PeriodicNotesToolHandler())
 add_tool_handler(tools.RecentPeriodicNotesToolHandler())
 add_tool_handler(tools.RecentChangesToolHandler())
 
-@app.list_tools()
-async def list_tools() -> list[Tool]:
+async def list_tools(
+    context: ServerRequestContext[Any],
+    params: PaginatedRequestParams,
+) -> ListToolsResult:
     """List available tools."""
 
-    return [th.get_tool_description() for th in tool_handlers.values()]
+    return ListToolsResult(
+        tools=[th.get_tool_description() for th in tool_handlers.values()]
+    )
 
-@app.call_tool()
-async def call_tool(name: str, arguments: Any) -> Sequence[TextContent | ImageContent | EmbeddedResource]:
+async def call_tool(
+    context: ServerRequestContext[Any],
+    params: CallToolRequestParams,
+) -> CallToolResult:
     """Handle tool calls for command line run."""
-    
-    if not isinstance(arguments, dict):
-        raise RuntimeError("arguments must be dictionary")
 
+    arguments = params.arguments or {}
 
-    tool_handler = get_tool_handler(name)
+    tool_handler = get_tool_handler(params.name)
     if not tool_handler:
-        raise ValueError(f"Unknown tool: {name}")
+        raise ValueError(f"Unknown tool: {params.name}")
 
     try:
-        return tool_handler.run_tool(arguments)
+        content = tool_handler.run_tool(arguments)
     except Exception as e:
         logger.error(str(e))
         raise RuntimeError(f"Caught Exception. Error: {str(e)}")
+
+    return CallToolResult(content=list(content))
+
+
+app = Server(
+    "mcp-obsidian",
+    on_list_tools=list_tools,
+    on_call_tool=call_tool,
+)
 
 
 async def main():
