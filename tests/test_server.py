@@ -4,7 +4,7 @@ from typing import TypeVar
 from unittest.mock import MagicMock, patch
 
 import pytest
-from mcp.types import TextContent
+from mcp.types import TextContent, CallToolRequestParams, PaginatedRequestParams
 
 from mcp_obsidian import server
 
@@ -20,8 +20,17 @@ def _run(awaitable: Awaitable[T]) -> T:
     return asyncio.run(_await(awaitable))
 
 
+def _list_tools():
+    return _run(server.list_tools(None, PaginatedRequestParams()))
+
+
+def _call_tool(name, arguments):
+    params = CallToolRequestParams(name=name, arguments=arguments)
+    return _run(server.call_tool(None, params))
+
+
 def test_registered_tools_include_expected_new_and_existing_tools():
-    names = {tool.name for tool in _run(server.list_tools())}
+    names = {tool.name for tool in _list_tools().tools}
 
     assert {
         "obsidian_list_files_in_vault",
@@ -39,14 +48,20 @@ def test_get_tool_handler_returns_none_for_unknown_tool():
     assert server.get_tool_handler("missing") is None
 
 
-def test_call_tool_rejects_non_dict_arguments():
-    with pytest.raises(RuntimeError, match="arguments must be dictionary"):
-        _run(server.call_tool("anything", None))
+def test_call_tool_treats_missing_arguments_as_empty_dict():
+    handler = MagicMock()
+    handler.run_tool.return_value = [TextContent(type="text", text="ok")]
+
+    with patch("mcp_obsidian.server.get_tool_handler", return_value=handler):
+        result = _call_tool("tool", None)
+
+    handler.run_tool.assert_called_once_with({})
+    assert result.content == [TextContent(type="text", text="ok")]
 
 
 def test_call_tool_rejects_unknown_tool():
     with pytest.raises(ValueError, match="Unknown tool"):
-        _run(server.call_tool("missing", {}))
+        _call_tool("missing", {})
 
 
 def test_call_tool_dispatches_to_handler():
@@ -54,10 +69,10 @@ def test_call_tool_dispatches_to_handler():
     handler.run_tool.return_value = [TextContent(type="text", text="ok")]
 
     with patch("mcp_obsidian.server.get_tool_handler", return_value=handler):
-        result = _run(server.call_tool("tool", {"a": 1}))
+        result = _call_tool("tool", {"a": 1})
 
     handler.run_tool.assert_called_once_with({"a": 1})
-    assert result == [TextContent(type="text", text="ok")]
+    assert result.content == [TextContent(type="text", text="ok")]
 
 
 def test_call_tool_wraps_handler_exception():
@@ -66,4 +81,4 @@ def test_call_tool_wraps_handler_exception():
 
     with patch("mcp_obsidian.server.get_tool_handler", return_value=handler):
         with pytest.raises(RuntimeError, match="Caught Exception. Error: bad args"):
-            _run(server.call_tool("tool", {}))
+            _call_tool("tool", {})
